@@ -52,9 +52,14 @@ import os
 _convertname = lambda x : "tess_{}_tmp.bmp".format(os.path.basename(x))
 _outputname = lambda x : "tess_out_{}".format(os.path.basename(x))
 _imageopen = lambda x : Image.open(x)
-_makebmp = lambda x, y : _imageopen(x).save(y)
 _delete = lambda x : os.remove(x) if os.path.exists(x) else None
 
+def _makebmp(x,y):
+    img = _imageopen(x)
+    rgba = img.split()
+    img = Image.merge("RGB",rgba[:3])
+    img.save(y)
+    
 def _readFile(name):
     with open(name) as f:
         d = f.read()
