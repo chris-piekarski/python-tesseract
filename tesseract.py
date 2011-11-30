@@ -15,7 +15,7 @@ Support for confidence estimates is planned for future releases.
 
 USAGE:
 From the shell:
- $ ./tesseract.py test.png                  # prints recognized text in image
+ $ ./tesseract.py test.png				  # prints recognized text in image
  $ ./tesseract.py -l fra test-european.jpg  # recognizes french text
 In python:
  > import Image
@@ -41,206 +41,203 @@ http://wiki.github.com/hoffstaetter/python-tesseract
 
 '''
 
-# CHANGE THIS IF TESSERACT IS NOT IN YOUR PATH, OR IS NAMED DIFFERENTLY
-TESSERACT_CMD = 'tesseract'
-
 import Image
 import subprocess
 import sys
 import os
 
-_convertname = lambda x : "tess_{}_tmp.bmp".format(os.path.basename(x))
-_outputname = lambda x : "tess_out_{}".format(os.path.basename(x))
-_imageopen = lambda x : Image.open(x)
-_delete = lambda x : os.remove(x) if os.path.exists(x) else None
+TESSERACT_CMD = 'tesseract'
+DELETE = lambda x : os.remove(x) if os.path.exists(x) else None
 
-def _makebmp(x,y):
-    img = _imageopen(x)
-    rgba = img.split()
-    img = Image.merge("RGB",rgba[:3])
-    img.save(y)
-    
-def _readFile(name):
-    with open(name) as f:
-        d = f.read()
-    return d
+def _make_bmp(file_in, file_out):
+	""" all pic files should be bmps before OCR """
+	img = Image.open(file_in)
+	rgba = img.split()
+	img = Image.merge("RGB", rgba[:3])
+	img.save(file_out)
+	
+def _read_file(file_name):
+	""" opens, reads, and returns the data from file_name """
+	with open(file_name) as f:
+		d = f.read()
+	return d
 
-def _runTesseract(input_filename, output_filename_base, lang=None,
-                  boxes=False):
-    '''
-    runs the command:
-        `TESSERACT_CMD` `input_filename` `output_filename_base`
+def _run_tesseract(input_filename, output_filename_base, lang=None,
+				  boxes=False):
+	'''
+	runs the command:
+		`TESSERACT_CMD` `input_filename` `output_filename_base`
 
-    returns the exit status of tesseract, as well as tesseract's stderr output
+	returns the exit status of tesseract, as well as tesseract's stderr output
 
-    '''
+	'''
 
-    command = [TESSERACT_CMD, input_filename, output_filename_base]
+	command = [TESSERACT_CMD, input_filename, output_filename_base]
 
-    if lang is not None:
-        command += ['-l', lang]
+	if lang is not None:
+		command += ['-l', lang]
 
-    if boxes:
-        command += ['batch.nochop', 'makebox']
+	if boxes:
+		command += ['batch.nochop', 'makebox']
 
-    proc = subprocess.Popen(command,
-            stderr=subprocess.PIPE)
-    # Beware that in some cases, tesseract may print more on stderr than
-    # allowed by the buffer of subprocess.Popen.stderr. So we must read stderr
-    # asap or Tesseract will remain stuck when trying to write again on stderr.
-    # In the end, we just have to make sure that proc.stderr.read() is called
-    # before proc.wait()
-    errors = proc.stderr.read()
-    return (proc.wait(), errors)
+	proc = subprocess.Popen(command,
+			stderr=subprocess.PIPE)
+	# Beware that in some cases, tesseract may print more on stderr than
+	# allowed by the buffer of subprocess.Popen.stderr. So we must read stderr
+	# asap or Tesseract will remain stuck when trying to write again on stderr.
+	# In the end, we just have to make sure that proc.stderr.read() is called
+	# before proc.wait()
+	errors = proc.stderr.read()
+	return (proc.wait(), errors)
 
 def get_errors(error_string):
-    '''
-    returns all lines in the error_string that start with the string "error"
+	'''
+	returns all lines in the error_string that start with the string "error"
 
-    '''
+	'''
 
-    lines = error_string.splitlines()
-    error_lines = tuple(line for line in lines if line.find('Error') >= 0)
-    if len(error_lines) > 0:
-        return '\n'.join(error_lines)
-    else:
-        return error_string.strip()
+	lines = error_string.splitlines()
+	error_lines = tuple(line for line in lines if line.find('Error') >= 0)
+	if len(error_lines) > 0:
+		return '\n'.join(error_lines)
+	else:
+		return error_string.strip()
 
 class TesseractError(Exception):
-    """
-    Exception raised when tesseract fails.
-    """
-    def __init__(self, status, message):
-        Exception.__init__(self, message)
-        self.status = status
-        self.message = message
-        self.args = (status, message)
+	"""
+	Exception raised when tesseract fails.
+	"""
+	def __init__(self, status, message):
+		Exception.__init__(self, message)
+		self.status = status
+		self.message = message
+		self.args = (status, message)
 
 
 class TesseractBox(object):
-    """
-    Tesseract Box: Tesserax boxes are rectangles around each individual
-    character recognized in the image.
-    """
-    def __init__(self, char, position, page):
-        """
-        Instantiate a tesseract box
+	"""
+	Tesseract Box: Tesserax boxes are rectangles around each individual
+	character recognized in the image.
+	"""
+	def __init__(self, char, position, page):
+		"""
+		Instantiate a tesseract box
 
-        Arguments:
-            char --- character found in this box
-            position --- the position of the box on the image. Given as a
-                tuple of tuple:
-                ((width_pt_x, height_pt_x), (width_pt_y, height_pt_y))
-            page --- page number, as specified in the box file (usually 0)
-        """
-        self.char = char
-        self.position = position
-        self.page = page
+		Arguments:
+			char --- character found in this box
+			position --- the position of the box on the image. Given as a
+				tuple of tuple:
+				((width_pt_x, height_pt_x), (width_pt_y, height_pt_y))
+			page --- page number, as specified in the box file (usually 0)
+		"""
+		self.char = char
+		self.position = position
+		self.page = page
 
-    def __str__(self):
-        return "%s %d %d %d %d %d" % (
-            self.char,
-            self.position[0][0],
-            self.position[0][1],
-            self.position[1][0],
-            self.position[1][1],
-            self.page
-        )
-
-
-def _readBoxFile(fileName):
-    """
-    Extract of set of TesseractBox from the lines of 'file_descriptor'
-        fileName - Location of box file
-        returns - [ TesseractBox ]
-    """
-    boxes = []
-    with open(fileName) as f:
-        for line in f.readlines():
-            line = line.strip()
-            if line == "":
-                continue
-            elements = line.split(" ")
-            if len(elements) < 6:
-                continue
-            position = ((int(elements[1]), int(elements[2])),
-                        (int(elements[3]), int(elements[4])))
-            box = TesseractBox(unicode(elements[0]), position, int(elements[5]))
-            boxes.append(box)
-    return boxes
+	def __str__(self):
+		return "%s %d %d %d %d %d" % (
+			self.char,
+			self.position[0][0],
+			self.position[0][1],
+			self.position[1][0],
+			self.position[1][1],
+			self.page
+		)
 
 
-def _writeBoxFile(fileName, boxes):
-    """
-    Write boxes in a box file. Output is in the same format as tesseract.
-    """
-    with open(fileName) as f:
-        for box in boxes:
-            f.write(str(box) + "\n")
+def _read_box_file(file_name):
+	"""
+	Extract of set of TesseractBox from the lines of 'file_descriptor'
+		fileName - Location of box file
+		returns - [ TesseractBox ]
+	"""
+	boxes = []
+	with open(file_name) as f:
+		for line in f.readlines():
+			line = line.strip()
+			if line == "":
+				continue
+			elements = line.split(" ")
+			if len(elements) < 6:
+				continue
+			position = ((int(elements[1]), int(elements[2])),
+						(int(elements[3]), int(elements[4])))
+			box = TesseractBox(unicode(elements[0]), position, int(elements[5]))
+			boxes.append(box)
+	return boxes
 
 
-def image2String(fileName, lang=None, boxes=False):
-    '''
-    Runs tesseract on the specified image. First, the image is written to disk,
-    and then the tesseract command is run on the image. Tesseract's result is
-    read, and the temporary files are erased.
+def _write_box_file(file_name, boxes):
+	"""
+	Write boxes in a box file. Output is in the same format as tesseract.
+	"""
+	with open(file_name) as f:
+		for box in boxes:
+			f.write(str(box) + "\n")
 
-    Exceptions:
-        TesseractError(status, errors)
 
-    Returns:
-        if no tesseract output: None 
-        if boxes == False (default): the text as read from the image
-        if boxes == True: an array of TesseractBox
+def image_to_string(file_name, lang=None, boxes=False):
+	'''
+	Runs tesseract on the specified image. First, the image is written to disk,
+	and then the tesseract command is run on the image. Tesseract's result is
+	read, and the temporary files are erased.
 
-    '''
-    data = None
-    tempName = _convertname(fileName)
-    outputBase = _outputname(fileName)
-    _makebmp(fileName, tempName)
-    outputFile = outputBase+".txt"
+	Exceptions:
+		TesseractError(status, errors)
 
-    (status, errors) = _runTesseract(tempName,
-                                     outputBase,
-                                     lang=lang,
-                                     boxes=boxes)
-    if status:
-        raise TesseractError(status, errors)
+	Returns:
+		if no tesseract output: None 
+		if boxes == False (default): the text as read from the image
+		if boxes == True: an array of TesseractBox
 
-    if os.path.exists(outputFile):
-        if not boxes:
-            data = _readFile(outputFile)
-        else:
-            data = _readBoxFile(outputFile)
-    _delete(outputFile)
-    _delete(tempName)
-    return data
+	'''
+	data = None
+	temp_name = "tess_{}_tmp.bmp".format(os.path.basename(file_name))
+	output_base = "tess_out_{}".format(os.path.basename(file_name))
+	_make_bmp(file_name, temp_name)
+	outputFile = output_base+".txt"
+
+	(status, errors) = _run_tesseract(temp_name,
+									 output_base,
+									 lang=lang,
+									 boxes=boxes)
+	if status:
+		raise TesseractError(status, errors)
+
+	if os.path.exists(outputFile):
+		if not boxes:
+			data = _read_file(outputFile)
+		else:
+			data = _read_box_file(outputFile)
+	DELETE(outputFile)
+	DELETE(temp_name)
+	return data
 
 def main():
-    """
-    Main method: allow quick testing of the API
-    """
-    if len(sys.argv) == 2:
-        filename = sys.argv[1]
-        try:
-            print image2String(filename)
-        except IOError:
-            sys.stderr.write('ERROR: Could not open file "%s"\n'
-                             % filename)
-            exit(1)
-    elif len(sys.argv) == 4 and sys.argv[1] == '-l':
-        lang = sys.argv[2]
-        filename = sys.argv[3]
-        try:
-            print image2String(filename,lang=lang)
-        except IOError:
-            sys.stderr.write('ERROR: Could not open file "%s"\n'
-                             % filename)
-            exit(1)
-    else:
-        sys.stderr.write(
-            'Usage: python tesseract.py [-l language] input_file\n')
-        exit(2)
+	"""
+	Main method: allow quick testing of the API
+	"""
+	if len(sys.argv) == 2:
+		filename = sys.argv[1]
+		try:
+			print image_to_string(filename)
+		except IOError:
+			sys.stderr.write('ERROR: Could not open file "%s"\n'
+							 % filename)
+			exit(1)
+	elif len(sys.argv) == 4 and sys.argv[1] == '-l':
+		lang = sys.argv[2]
+		filename = sys.argv[3]
+		try:
+			print image_to_string(filename, lang=lang)
+		except IOError:
+			sys.stderr.write('ERROR: Could not open file "%s"\n'
+							 % filename)
+			exit(1)
+	else:
+		sys.stderr.write(
+			'Usage: python tesseract.py [-l language] input_file\n')
+		exit(2)
 
 if __name__ == '__main__':
-    main()
+	main()
