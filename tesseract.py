@@ -39,6 +39,8 @@ Python-tesseract is released under the GPL v3.
 Copyright (c) Samuel Hoffstaetter, 2009
 http://wiki.github.com/hoffstaetter/python-tesseract
 
+Updated by @c_piekarski
+
 '''
 
 import Image
@@ -49,11 +51,12 @@ import os
 TESSERACT_CMD = 'tesseract'
 DELETE = lambda x : os.remove(x) if os.path.exists(x) else None
 
-def _make_bmp(file_in, file_out):
-	""" all pic files should be bmps before OCR """
+def _remove_alpha(file_in, file_out):
+	""" all pic files should have no alpha channel before OCR """
 	img = Image.open(file_in)
-	rgba = img.split()
-	img = Image.merge("RGB", rgba[:3])
+	if img.split() == 4:
+		rgba = img.split()
+		img = Image.merge("RGB", rgba[:3])
 	img.save(file_out)
 	
 def _read_file(file_name):
@@ -194,7 +197,7 @@ def image_to_string(file_name, lang=None, boxes=False):
 	data = None
 	temp_name = "tess_{}_tmp.bmp".format(os.path.basename(file_name))
 	output_base = "tess_out_{}".format(os.path.basename(file_name))
-	_make_bmp(file_name, temp_name)
+	_remove_alpha(file_name, temp_name)
 	outputFile = output_base+".txt"
 
 	(status, errors) = _run_tesseract(temp_name,
